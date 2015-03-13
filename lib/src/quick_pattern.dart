@@ -22,6 +22,8 @@ class UrlMatcher {
   
   int longestMatch(String path) => regex.matchAsPrefix(path).group(0).length;
   
+  Map<String, String> parameters(String path) => keys.parameters(path);
+  
   bool operator==(other) {
     if (other is! UrlMatcher) return false;
     return this.regex.pattern == other.regex.pattern;
