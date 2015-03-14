@@ -11,23 +11,19 @@ defineTests() {
   var server = new Server();
   
   server.router.middleware
-    ..add(new LogMiddleware());
+    ..add(const LogMiddleware());
   
   server.router.routes
     ..get("/", (request, response) {
       response.status(200).send("Everything allright");
+    })
+    ..get("/users/:name", (request, response) {
+      response.status(200).send(request.parameters["name"]);
     });
   
   server.router.errorHandlers
-    ..use((error, request, response, next) {
-      if (error is RouteNotFound) {
-        response.status(404).send("Not found");
-      }
-    })
-    ..use((error, request, response, next) {
-      print(error);
-      response.status(500).send("Internal server error");
-    });
+    ..add(const RouteNotFoundHandler())
+    ..add(const UncaughtErrorHandler());
   
   server.listen();
 

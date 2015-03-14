@@ -3,7 +3,7 @@ library quick.server;
 import 'dart:io';
 
 import 'quick_requests.dart';
-import 'quick_route.dart';
+import 'quick_router.dart';
 
 
 class Server {
