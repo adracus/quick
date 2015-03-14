@@ -27,7 +27,7 @@ class RequestResponsePair {
   RequestResponsePair(this.request, this.response);
   
   factory RequestResponsePair.transform(HttpRequest httpRequest) {
-    var request = new Request(httpRequest.method, httpRequest.uri);
+    var request = new Request(httpRequest);
     var response = new Response(httpRequest.response);
     return new RequestResponsePair(request, response);
   }

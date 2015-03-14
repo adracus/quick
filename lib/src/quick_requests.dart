@@ -1,19 +1,23 @@
 library quick.requests;
 
-import 'dart:io' show HttpResponse;
+import 'dart:io' show HttpResponse, HttpRequest;
 
 
 class Request {
-  final String method;
-  final Uri uri;
-  String body;
+  final HttpRequest _request;
+  var body;
   
   Map<String, String> parameters;
-  Map context = {};
+  Map _context = {};
   
-  Request(this.method, this.uri, [this.body]);
+  Request(this._request);
   
+  operator[](key) => _context[key];
+  operator[]=(key, value) => _context[key] = value;
+  
+  Uri get uri => _request.uri;
   String get path => uri.path;
+  String get method => _request.method;
   Map<String, String> get query => uri.queryParameters;
 }
 
