@@ -2,8 +2,6 @@ library quick.requests;
 
 import 'dart:io' show HttpResponse;
 
-import 'quick_route.dart';
-
 
 class Request {
   final String method;

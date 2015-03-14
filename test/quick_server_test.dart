@@ -11,22 +11,19 @@ defineTests() {
   var server = new Server();
   
   server.router.middleware
-    ..use((request, response, next) {
-      print("Request on ${request.uri}");
-      next();
-    })
-    ..get("/", (request, response, next) {
-      request.context["ct"] = ct++;
-      if (3 == ct) throw "Some error";
-      next();
-    });
+    ..add(new LogMiddleware());
   
   server.router.routes
     ..get("/", (request, response) {
-      response.status(200).send("Everything allright ${request.context["ct"]}");
+      response.status(200).send("Everything allright");
     });
   
   server.router.errorHandlers
+    ..use((error, request, response, next) {
+      if (error is RouteNotFound) {
+        response.status(404).send("Not found");
+      }
+    })
     ..use((error, request, response, next) {
       print(error);
       response.status(500).send("Internal server error");

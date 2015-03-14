@@ -12,6 +12,42 @@ typedef MiddlewareHandlerFn(Request request, Response response, Next next);
 typedef ErrorHandlerFn(error, Request request, Response response, Next next);
 typedef RouteHandlerFn(Request request, Response response);
 
+class LogMiddleware implements Middleware {
+  final RouteMatcher matcher = new RouteMatcher(new MethodSet.all(), "/.*");
+  
+  MiddlewareHandlerFn handlerFn = (request, response, next) {
+    var time = new DateTime.now();
+    print("[$time] ${request.method} ${request.uri}");
+    next();
+  };
+  
+  bool matches(String method, String path) {
+    return matcher.matches(method, path);
+  }
+}
+
+
+class RouteNotFound implements Exception {
+  final Uri uri;
+  
+  RouteNotFound(this.uri);
+  
+  toString() => "Could not find $uri";
+}
+
+
+class NonExistentRoute implements Route {
+  final RouteMatcher matcher = new RouteMatcher.total();
+  final RouteHandlerFn handlerFn = (Request request, Response response) {
+    throw new RouteNotFound(request.uri);
+  };
+  
+  void handle(Request request, Response response) =>
+      handlerFn(request, response);
+  
+  bool matches(String method, String path) => matcher.matches(method, path);
+}
+
 
 class Router {
   RouteSet routes = new RouteSet();
@@ -19,26 +55,26 @@ class Router {
   ErrorHandlerList errorHandlers = new ErrorHandlerList();
   
   void handle(Request request, Response response) {
-    var handler = routes.matching(request.method, request.path);
-    var mLayers = middleware.matching(request.method, request.path);
-    var layers = []..addAll(mLayers)..add(handler);
-    
-    var calls = [];
-    for (int i = 0; i < layers.length; i++) {
-      calls.add(() {
-        var layer = layers[i];
-        request.parameters = layer.matcher.parameters(request.path);
-        if (layer is Middleware) {
-          layer.handle(request, response, () => calls[i + 1]());
-          return;
-        }
-        if (layer is Route) {
-          layer.handle(request, response);
-        }
-      });
-    }
-    
     runZoned(() {
+      var handler = routes.matching(request.method, request.path,
+          orElse: () => new NonExistentRoute());
+      var mLayers = middleware.matching(request.method, request.path);
+      var layers = []..addAll(mLayers)..add(handler);
+      
+      var calls = [];
+      for (int i = 0; i < layers.length; i++) {
+        calls.add(() {
+          var layer = layers[i];
+          request.parameters = layer.matcher.parameters(request.path);
+          if (layer is Middleware) {
+            layer.handlerFn(request, response, () => calls[i + 1]());
+            return;
+          }
+          if (layer is Route) {
+            layer.handlerFn(request, response);
+          }
+        });
+      }
       calls.first(); // Run the pipeline
     }, onError: (error) => handleError(error, request, response));
   }
@@ -52,7 +88,7 @@ class Router {
       calls.add(() {
         var handler = handlers[i];
         request.parameters = handler.matcher.parameters(request.path);
-        handler.handle(error, request, response, () => calls[i + 1]());
+        handler.handlerFn(error, request, response, () => calls[i + 1]());
       });
     }
     
@@ -63,6 +99,8 @@ class Router {
 
 abstract class HandlerIterable<E, F> {
   get _handlers;
+  
+  void add(E handler) => _handlers.add(handler);
   
   E _createHandler(RouteMatcher matcher, F handlerFunction);
   
@@ -121,8 +159,9 @@ class RouteSet extends Object with HandlerIterable<Route, RouteHandlerFn> {
     return new Route(matcher, handler);
   }
   
-  Route matching(String method, String path) {
-    return _handlers.firstWhere((route) => route.matches(method, path));
+  Route matching(String method, String path, {Route orElse()}) {
+    return _handlers.firstWhere((route) => route.matches(method, path),
+        orElse: orElse);
   }
 }
 
@@ -172,18 +211,12 @@ abstract class Handler<F> {
 class ErrorHandler extends Handler<ErrorHandlerFn>{
   ErrorHandler(RouteMatcher matcher, ErrorHandlerFn errorHandlerFn)
       : super(matcher, errorHandlerFn);
-  
-  void handle(error, Request request, Response response, Next next) =>
-      handlerFn(error, request, response, next);
 }
 
 
 class Middleware extends Handler<MiddlewareHandlerFn> {
   Middleware(RouteMatcher matcher, MiddlewareHandlerFn handler)
       : super(matcher, handler);
-  
-  void handle(Request request, Response response, Next next) =>
-      handlerFn(request, response, next);
 }
 
 
@@ -197,16 +230,16 @@ class Route extends Handler<RouteHandlerFn> {
   }
 
   int get hashCode => matcher.hashCode;
-  
-  void handle(Request request, Response response) {
-    handlerFn(request, response);
-  }
 }
 
 
 class RouteMatcher {
   final MethodSet methods;
   final UrlMatcher matcher;
+  
+  RouteMatcher.total()
+      : methods = new MethodSet.all(),
+        matcher = new UrlMatcher.parse("/.*");
   
   RouteMatcher(this.methods, String path)
       : matcher = new UrlMatcher.parse(path);
