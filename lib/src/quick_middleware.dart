@@ -2,7 +2,6 @@ library quick.middleware;
 
 import 'dart:async' show Future;
 import 'dart:convert' show JSON;
-import 'dart:io' show ContentType;
 
 import 'quick_requests.dart';
 import 'quick_handler.dart';
@@ -37,7 +36,7 @@ class TextBodyParser extends Object with BodyParser {
   shouldApply(Request request) => request.headers.contentLength != 0;
   
   Future<String> apply(Request request) {
-    return request.request.toList().then((lineBytes) {
+    return request.input.toList().then((lineBytes) {
       return lineBytes.fold("", (result, line) =>
           result += new String.fromCharCodes(line) + "\n");
     });
@@ -49,6 +48,7 @@ class JsonBodyParser extends Object with BodyParser {
   
   bool shouldApply(Request request) {
     return _parser.shouldApply(request) &&
+        request.headers.contentType != null &&
         request.headers.contentType.primaryType == "application" &&
         request.headers.contentType.subType == "json";
   }

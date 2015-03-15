@@ -15,7 +15,6 @@ defineTests() {
   
   server.router.routes
     ..all("/", (request, response) {
-      print(request.body["user"]);
       response.status(200).send("Everything allright");
     })
     ..get("/users/:name", (request, response) {
@@ -24,7 +23,7 @@ defineTests() {
   
   server.router.errorHandlers
     ..add(const RouteNotFoundHandler())
-    ..add(const UncaughtErrorHandler());
+    ;//..add(const UncaughtErrorHandler());
   
   server.listen();
 
