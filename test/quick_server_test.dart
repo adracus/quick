@@ -1,7 +1,6 @@
 library quick.server.test;
 
 import 'package:quick/quick.dart';
-import 'package:unittest/unittest.dart';
 
 main() => defineTests();
 
@@ -11,10 +10,12 @@ defineTests() {
   var server = new Server();
   
   server.router.middleware
-    ..add(const LogMiddleware());
+    ..add(const LogMiddleware())
+    ..add(new BodyParser.json());
   
   server.router.routes
-    ..get("/", (request, response) {
+    ..all("/", (request, response) {
+      print(request.body["user"]);
       response.status(200).send("Everything allright");
     })
     ..get("/users/:name", (request, response) {

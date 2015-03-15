@@ -1,5 +1,9 @@
 library quick.middleware;
 
+import 'dart:async' show Future;
+import 'dart:convert' show JSON;
+import 'dart:io' show ContentType;
+
 import 'quick_requests.dart';
 import 'quick_handler.dart';
 import 'quick_route.dart';
@@ -7,6 +11,54 @@ import 'quick_route.dart';
 typedef Next();
 typedef MiddlewareHandlerFn(Request request, Response response, Next next);
 typedef ErrorHandlerFn(error, Request request, Response response, Next next);
+
+abstract class BodyParser implements Middleware {
+  MiddlewareHandlerFn get handlerFn => (Request request, Response response, Next next) {
+    if (shouldApply(request)) {
+      return apply(request).then((result) {
+        request.body = result;
+        return next();
+      });
+    }
+    return next();
+  };
+  
+  factory BodyParser.json() => new JsonBodyParser();
+  factory BodyParser.text() => new TextBodyParser();
+  
+  Future apply(Request request);
+  
+  bool shouldApply(Request request);
+  
+  bool matches(String method, String path) => true;
+}
+
+class TextBodyParser extends Object with BodyParser {
+  shouldApply(Request request) => request.headers.contentLength != 0;
+  
+  Future<String> apply(Request request) {
+    return request.request.toList().then((lineBytes) {
+      return lineBytes.fold("", (result, line) =>
+          result += new String.fromCharCodes(line) + "\n");
+    });
+  }
+}
+
+class JsonBodyParser extends Object with BodyParser {
+  TextBodyParser _parser = new TextBodyParser();
+  
+  bool shouldApply(Request request) {
+    return _parser.shouldApply(request) &&
+        request.headers.contentType.primaryType == "application" &&
+        request.headers.contentType.subType == "json";
+  }
+  
+  Future apply(Request request) {
+    return _parser.apply(request).then((text) {
+      return JSON.decode(text);
+    });
+  }
+}
 
 class LogMiddleware implements Middleware {
   MiddlewareHandlerFn get handlerFn => (request, response, next) {
@@ -41,7 +93,12 @@ class RouteNotFoundHandler extends AlwaysErrorHandler {
 class UncaughtErrorHandler extends AlwaysErrorHandler {
   ErrorHandlerFn get handlerFn => (error, Request request, Response response, Next next) {
     print(error);
-    response.status(500).send("Internal server error");
+    try {
+      if (!response.isSent)
+        response.status(500).send("Internal server error");
+    } catch (e) {
+      print(e);
+    }
   };
   
   const UncaughtErrorHandler();
