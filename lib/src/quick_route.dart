@@ -31,7 +31,7 @@ class RouteSet extends Object with HandlerIterable<Route, RouteHandlerFn> {
     
   RouteSet();
   
-  BaseRoute createHandler(HandlerMatcher matcher, RouteHandlerFn handler) {
+  BaseRoute createHandler(Matcher matcher, RouteHandlerFn handler) {
     return new BaseRoute(matcher, handler);
   }
   
@@ -42,7 +42,7 @@ class RouteSet extends Object with HandlerIterable<Route, RouteHandlerFn> {
 }
 
 class BaseRoute extends BaseHandler<RouteHandlerFn> implements Route {
-  BaseRoute(HandlerMatcher matcher, RouteHandlerFn handlerFn)
+  BaseRoute(Matcher matcher, RouteHandlerFn handlerFn)
       : super(matcher, handlerFn);
   
   operator==(other) {

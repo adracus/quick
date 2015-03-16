@@ -15,7 +15,8 @@ class Request {
   Request(this._request);
   
   bool accepts(String type) =>
-      _request.headers['accept'].where((name) => name.split(',').indexOf(type) ).length > 0;
+      _request.headers['accept'].where((name) =>
+          name.split(',').indexOf(type) != -1).isNotEmpty;
   
   bool isMime(String type) =>
       _request.headers['content-type'].where((value) => value == type).isNotEmpty;
@@ -57,16 +58,25 @@ class Response {
   bool get isSent => _isSent;
   
   void send(String message) {
-    _isSent = true;
     _response.write(message);
+    close();
+  }
+  
+  void close() {
+    _isSent = true;
     _response.flush().then((_) => _response.close());
   }
   
   header(String name, [value]) {
     if (value == null) {
-      return _response.headers[name];
+      _response.headers[name];
     }
     _response.headers.set(name, value);
+    return this;
+  }
+  
+  Response add(String content) {
+    _response.write(content);
     return this;
   }
 
@@ -106,7 +116,8 @@ class Response {
 
   Response deleteCookie(String name) {
     Map options = { 'expires': 'Thu, 01-Jan-70 00:00:01 GMT', 'path': '/' };
-    return cookie(name, '', options);
+    cookie(name, '', options);
+    return this;
   }
 
   void json(data) {

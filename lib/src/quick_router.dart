@@ -12,7 +12,7 @@ class Router implements CompositeHandler {
   MiddlewareList middleware = new MiddlewareList();
   ErrorHandlerList errorHandlers = new ErrorHandlerList();
   
-  createHandler(HandlerMatcher matcher, Function handlerFn) {
+  createHandler(Matcher matcher, Function handlerFn) {
     if (handlerFn is RouteHandlerFn)
       return new BaseRoute(matcher, handlerFn);
     if (handlerFn is MiddlewareHandlerFn)
@@ -24,7 +24,7 @@ class Router implements CompositeHandler {
   }
   
   void _addHandler(MethodSet methods, String path, Function handlerFn) {
-    var matcher = new HandlerMatcher(methods, path);
+    var matcher = new Matcher(methods, path);
     var handler = createHandler(matcher, handlerFn);
     add(handler);
   }

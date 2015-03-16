@@ -11,10 +11,9 @@ import 'quick_route.dart';
 typedef Next();
 typedef MiddlewareHandlerFn(Request request, Response response, Next next);
 typedef ErrorHandlerFn(error, Request request, Response response, Next next);
-typedef OnError(error, request, response);
 
 abstract class BodyParser implements Middleware {
-  OnError onError;
+  ErrorHandlerFn onError;
   
   MiddlewareHandlerFn get handlerFn => (Request request, Response response, Next next) {
     if (shouldApply(request)) {
@@ -24,7 +23,7 @@ abstract class BodyParser implements Middleware {
           return next();
         });
       }, onError: (e) {
-        if (null != onError) return onError(e, request, response);
+        if (null != onError) return onError(e, request, response, next);
         throw e;
       });
     }
@@ -58,11 +57,11 @@ class TextBodyParser extends Object with BodyParser {
 }
 
 class JsonBodyParser extends Object with BodyParser {
-  static final OnError defaultOnError = (e, request, response) {
+  static final  defaultOnError = (e, request, response) {
     response.status(HttpStatus.BAD_REQUEST).send("Invalid JSON");
   };
   
-  JsonBodyParser({OnError onError}) {
+  JsonBodyParser({ErrorHandlerFn onError}) {
     this.onError = null == onError ? defaultOnError : onError;
   }
   
@@ -84,7 +83,7 @@ class JsonBodyParser extends Object with BodyParser {
 
 
 class UrlEncodedBodyParser extends Object with BodyParser {
-  static final OnError defaultOnError = (error, request, response) {
+  static final ErrorHandlerFn defaultOnError = (error, request, response, next) {
     response.status(HttpStatus.BAD_REQUEST).send("Invalid urlencoded body");
   };
   
@@ -154,7 +153,7 @@ class MiddlewareList extends Object with HandlerIterable<Middleware, MiddlewareH
       
   MiddlewareList();
   
-  BaseMiddleware createHandler(HandlerMatcher matcher, MiddlewareHandlerFn handler) {
+  BaseMiddleware createHandler(Matcher matcher, MiddlewareHandlerFn handler) {
     return new BaseMiddleware(matcher, handler);
   }
   
@@ -170,7 +169,7 @@ class ErrorHandlerList extends Object with HandlerIterable<ErrorHandler, ErrorHa
   
   ErrorHandlerList();
   
-  BaseErrorHandler createHandler(HandlerMatcher matcher, ErrorHandlerFn handler) {
+  BaseErrorHandler createHandler(Matcher matcher, ErrorHandlerFn handler) {
     return new BaseErrorHandler(matcher, handler);
   }
   
@@ -182,12 +181,12 @@ class ErrorHandlerList extends Object with HandlerIterable<ErrorHandler, ErrorHa
 }
 
 class BaseMiddleware extends BaseHandler<MiddlewareHandlerFn> implements Middleware {
-  BaseMiddleware(HandlerMatcher matcher, MiddlewareHandlerFn handlerFn)
+  BaseMiddleware(Matcher matcher, MiddlewareHandlerFn handlerFn)
       : super(matcher, handlerFn);
 }
 
 class BaseErrorHandler extends BaseHandler<ErrorHandlerFn> implements ErrorHandler {
-  BaseErrorHandler(HandlerMatcher matcher, ErrorHandlerFn handlerFn)
+  BaseErrorHandler(Matcher matcher, ErrorHandlerFn handlerFn)
       : super(matcher, handlerFn);
 }
 

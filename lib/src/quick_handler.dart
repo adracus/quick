@@ -11,10 +11,10 @@ abstract class HandlerIterable<E extends Handler, F extends Function> implements
     handlers.add(handler);
   }
   
-  E createHandler(HandlerMatcher matcher, F handlerFunction);
+  E createHandler(Matcher matcher, F handlerFunction);
   
   void _addHandler(MethodSet methods, String path, F handlerFunction) {
-    var matcher = new HandlerMatcher(methods, path);
+    var matcher = new Matcher(methods, path);
     var handler = createHandler(matcher, handlerFunction);
     add(handler);
   }
@@ -61,7 +61,7 @@ abstract class HandlerIterable<E extends Handler, F extends Function> implements
 abstract class CompositeHandler<E extends Handler, F extends Function>{
   void add(E handler);
     
-  E createHandler(HandlerMatcher matcher, F handlerFunction);
+  E createHandler(Matcher matcher, F handlerFunction);
   
   void get(String path, F handler);
   
@@ -89,7 +89,7 @@ abstract class Handler<F extends Function> {
 }
 
 abstract class BaseHandler<F extends Function> implements Handler<F>{
-  final HandlerMatcher matcher;
+  final Matcher matcher;
   final F handlerFn;
   
   BaseHandler(this.matcher, this.handlerFn);
@@ -97,15 +97,15 @@ abstract class BaseHandler<F extends Function> implements Handler<F>{
   bool matches(String method, String path) => matcher.matches(method, path);
 }
 
-class HandlerMatcher {
+class Matcher {
   final MethodSet methods;
   final UrlMatcher matcher;
   
-  HandlerMatcher.total()
+  Matcher.total()
       : methods = new MethodSet.all(),
         matcher = new UrlMatcher.parse("/.*");
   
-  HandlerMatcher(this.methods, String path)
+  Matcher(this.methods, String path)
       : matcher = new UrlMatcher.parse(path);
   
   bool matches(String method, String path) {
@@ -113,7 +113,7 @@ class HandlerMatcher {
   }
   
   operator==(other) {
-    if (other is! HandlerMatcher) return false;
+    if (other is! Matcher) return false;
     return methods == other.methods && matcher == other.matcher;
   }
   
