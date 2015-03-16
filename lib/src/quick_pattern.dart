@@ -20,8 +20,6 @@ class UrlMatcher {
     return path.length == match.length;
   }
   
-  int longestMatch(String path) => regex.matchAsPrefix(path).group(0).length;
-  
   Map<String, String> parameters(String path) => keys.parameters(path);
   
   bool operator==(other) {
