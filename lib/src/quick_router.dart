@@ -7,10 +7,79 @@ import 'quick_route.dart';
 import 'quick_middleware.dart';
 import 'quick_handler.dart';
 
-class Router {
+class Router implements CompositeHandler {
   RouteSet routes = new RouteSet();
   MiddlewareList middleware = new MiddlewareList();
   ErrorHandlerList errorHandlers = new ErrorHandlerList();
+  
+  createHandler(HandlerMatcher matcher, Function handlerFn) {
+    if (handlerFn is RouteHandlerFn)
+      return new BaseRoute(matcher, handlerFn);
+    if (handlerFn is MiddlewareHandlerFn)
+      return new BaseMiddleware(matcher, handlerFn);
+    if (handlerFn is ErrorHandlerFn)
+      return new BaseErrorHandler(matcher, handlerFn);
+    throw new ArgumentError.value(handlerFn, "handlerFn",
+        "Invalid handler function");
+  }
+  
+  void _addHandler(MethodSet methods, String path, Function handlerFn) {
+    var matcher = new HandlerMatcher(methods, path);
+    var handler = createHandler(matcher, handlerFn);
+    add(handler);
+  }
+  
+  void add(Handler handler) {
+    if (handler is Route) {
+      routes.add(handler);
+      return;
+    }
+    if (handler is Middleware) {
+      middleware.add(handler);
+      return;
+    }
+    if (handler is ErrorHandler) {
+      errorHandlers.add(handler);
+      return;
+    }
+    throw new ArgumentError.value(handler, "handler", "Invalid handler");
+  }
+  
+  void get(String path, Function handler) {
+    _addHandler(new MethodSet.get(), path, handler);
+  }
+  
+  void post(String path, Function handler) {
+    _addHandler(new MethodSet.post(), path, handler);
+  }
+  
+  void put(String path, Function handler) {
+    _addHandler(new MethodSet.put(), path, handler);
+  }
+  
+  void delete(String path, Function handler) {
+    _addHandler(new MethodSet.delete(), path, handler);
+  }
+  
+  void trace(String path, Function handler) {
+    _addHandler(new MethodSet.trace(), path, handler);
+  }
+  
+  void head(String path, Function handler) {
+    _addHandler(new MethodSet.head(), path, handler);
+  }
+  
+  void connect(String path, Function handler) {
+    _addHandler(new MethodSet.connect(), path, handler);
+  }
+  
+  void all(String path, Function handler) {
+    _addHandler(new MethodSet.all(), path, handler);
+  }
+  
+  void use(Function handler) {
+    _addHandler(new MethodSet.all(), "/.*", handler);
+  }
   
   void handle(Request request, Response response) {
     runZoned(() {
@@ -48,7 +117,10 @@ class Router {
         var handler = handlers[i];
         if (handler is BaseHandler)
           request.parameters = handler.matcher.parameters(request.path);
-        handler.handlerFn(error, request, response, () => calls[i + 1]());
+        handler.handlerFn(error, request, response, () {
+          if (i == handlers.length - 1) throw error; // Last handler, uncaught error
+          calls[i + 1]();
+        });
       });
     }
     

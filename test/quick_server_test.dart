@@ -4,14 +4,13 @@ import 'package:quick/quick.dart';
 
 main() => defineTests();
 
-var ct = 0;
-
 defineTests() {
   var server = new Server();
   
   server.router.middleware
     ..add(const LogMiddleware())
-    ..add(new BodyParser.json());
+    ..add(new BodyParser.json())
+    ..add(new BodyParser.urlEncoded());
   
   server.router.routes
     ..all("/", (request, response) {
@@ -23,7 +22,7 @@ defineTests() {
   
   server.router.errorHandlers
     ..add(const RouteNotFoundHandler())
-    ;//..add(const UncaughtErrorHandler());
+    ..add(const UncaughtErrorHandler());
   
   server.listen();
 

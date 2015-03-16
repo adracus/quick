@@ -1,7 +1,8 @@
 library quick.middleware;
 
-import 'dart:async' show Future;
+import 'dart:async' show Future, runZoned;
 import 'dart:convert' show JSON;
+import 'dart:io' show HttpStatus;
 
 import 'quick_requests.dart';
 import 'quick_handler.dart';
@@ -10,13 +11,21 @@ import 'quick_route.dart';
 typedef Next();
 typedef MiddlewareHandlerFn(Request request, Response response, Next next);
 typedef ErrorHandlerFn(error, Request request, Response response, Next next);
+typedef OnError(error, request, response);
 
 abstract class BodyParser implements Middleware {
+  OnError onError;
+  
   MiddlewareHandlerFn get handlerFn => (Request request, Response response, Next next) {
     if (shouldApply(request)) {
-      return apply(request).then((result) {
-        request.body = result;
-        return next();
+      return runZoned(() {
+        return apply(request).then((result) {
+          request.body = result;
+          return next();
+        });
+      }, onError: (e) {
+        if (null != onError) return onError(e, request, response);
+        throw e;
       });
     }
     return next();
@@ -24,6 +33,7 @@ abstract class BodyParser implements Middleware {
   
   factory BodyParser.json() => new JsonBodyParser();
   factory BodyParser.text() => new TextBodyParser();
+  factory BodyParser.urlEncoded() => new UrlEncodedBodyParser();
   
   Future apply(Request request);
   
@@ -33,7 +43,11 @@ abstract class BodyParser implements Middleware {
 }
 
 class TextBodyParser extends Object with BodyParser {
-  shouldApply(Request request) => request.headers.contentLength != 0;
+  TextBodyParser();
+    
+  bool shouldApply(Request request) => 
+      request.headers.contentLength != null &&
+      request.headers.contentLength != 0;
   
   Future<String> apply(Request request) {
     return request.input.toList().then((lineBytes) {
@@ -44,6 +58,14 @@ class TextBodyParser extends Object with BodyParser {
 }
 
 class JsonBodyParser extends Object with BodyParser {
+  static final OnError defaultOnError = (e, request, response) {
+    response.status(HttpStatus.BAD_REQUEST).send("Invalid JSON");
+  };
+  
+  JsonBodyParser({OnError onError}) {
+    this.onError = null == onError ? defaultOnError : onError;
+  }
+  
   TextBodyParser _parser = new TextBodyParser();
   
   bool shouldApply(Request request) {
@@ -56,6 +78,28 @@ class JsonBodyParser extends Object with BodyParser {
   Future apply(Request request) {
     return _parser.apply(request).then((text) {
       return JSON.decode(text);
+    });
+  }
+}
+
+
+class UrlEncodedBodyParser extends Object with BodyParser {
+  static final OnError defaultOnError = (error, request, response) {
+    response.status(HttpStatus.BAD_REQUEST).send("Invalid urlencoded body");
+  };
+  
+  TextBodyParser _parser = new TextBodyParser();
+  
+  bool shouldApply(Request request) {
+    return _parser.shouldApply(request) &&
+        request.headers.contentType != null &&
+        request.headers.contentType.primaryType == "application" &&
+        request.headers.contentType.subType == "x-www-form-urlencoded";
+  }
+  
+  Future apply(Request request) {
+    return _parser.apply(request).then((text) {
+      return Uri.splitQueryString(text);
     });
   }
 }

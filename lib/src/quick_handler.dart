@@ -4,17 +4,19 @@ import 'package:quiver/core.dart';
 
 import 'quick_pattern.dart';
 
-abstract class HandlerIterable<E, F> {
+abstract class HandlerIterable<E extends Handler, F extends Function> implements CompositeHandler<E, F> {
   get handlers;
   
-  void add(E handler) => handlers.add(handler);
+  void add(E handler) {
+    handlers.add(handler);
+  }
   
   E createHandler(HandlerMatcher matcher, F handlerFunction);
   
   void _addHandler(MethodSet methods, String path, F handlerFunction) {
     var matcher = new HandlerMatcher(methods, path);
     var handler = createHandler(matcher, handlerFunction);
-    handlers.add(handler);
+    add(handler);
   }
   
   void get(String path, F handler) {
@@ -54,6 +56,30 @@ abstract class HandlerIterable<E, F> {
   }
   
   matching(String method, String path);
+}
+
+abstract class CompositeHandler<E extends Handler, F extends Function>{
+  void add(E handler);
+    
+  E createHandler(HandlerMatcher matcher, F handlerFunction);
+  
+  void get(String path, F handler);
+  
+  void post(String path, F handler);
+  
+  void put(String path, F handler);
+  
+  void delete(String path, F handler);
+  
+  void trace(String path, F handler);
+  
+  void head(String path, F handler);
+  
+  void connect(String path, F handler);
+  
+  void all(String path, F handler);
+  
+  void use(F handler);
 }
 
 abstract class Handler<F extends Function> {
