@@ -14,7 +14,7 @@ class Request {
   Request(this._request);
 
   bool accepts(String type) => _request.headers['accept']
-      .where((name) => name.split(',').indexOf(type) != -1)
+      .where((name) => name.split(',').contains(type))
       .isNotEmpty;
 
   bool isMime(String type) => _request.headers['content-type']

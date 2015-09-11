@@ -1,6 +1,7 @@
 library quick.server;
 
 import 'dart:io';
+import 'dart:async' show Future;
 
 import 'quick_requests.dart';
 import 'quick_router.dart';
@@ -8,9 +9,9 @@ import 'quick_router.dart';
 class Server {
   final Router router = new Router();
 
-  void listen({int port: 8080, String address: "0.0.0.0"}) {
-    HttpServer.bind(address, port).then((server) {
-      server.listen((request) {
+  Future listen({int port: 8080, String address: "0.0.0.0"}) {
+    return HttpServer.bind(address, port).then((server) {
+      return server.listen((request) {
         var pair = new RequestResponsePair.transform(request);
         router.handle(pair.request, pair.response);
       });
