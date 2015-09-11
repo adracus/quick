@@ -5,7 +5,6 @@ import 'dart:io' show HttpHeaders, HttpRequest;
 import 'package:quick/quick.dart';
 import 'package:mock/mock.dart';
 
-
 @proxy
 class MockRequest extends Mock implements Request {
   noSuchMethod(inv) => super.noSuchMethod(inv);

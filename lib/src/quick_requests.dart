@@ -4,36 +4,36 @@ import 'dart:io';
 import 'dart:mirrors' show reflect;
 import 'dart:convert' show JSON;
 
-
 class Request {
   final HttpRequest _request;
   var body;
-  
+
   Map<String, String> parameters;
   Map _context = {};
-  
+
   Request(this._request);
-  
-  bool accepts(String type) =>
-      _request.headers['accept'].where((name) =>
-          name.split(',').indexOf(type) != -1).isNotEmpty;
-  
-  bool isMime(String type) =>
-      _request.headers['content-type'].where((value) => value == type).isNotEmpty;
-  
+
+  bool accepts(String type) => _request.headers['accept']
+      .where((name) => name.split(',').indexOf(type) != -1)
+      .isNotEmpty;
+
+  bool isMime(String type) => _request.headers['content-type']
+      .where((value) => value == type)
+      .isNotEmpty;
+
   bool get isForwarded => _request.headers['x-forwarded-host'] != null;
-  
-  operator[](key) => _context[key];
-  operator[]=(key, value) => _context[key] = value;
-  
+
+  operator [](key) => _context[key];
+  operator []=(key, value) => _context[key] = value;
+
   List<String> header(String name) => _request.headers[name.toLowerCase()];
-  
+
   List<Cookie> get cookies => _request.cookies.map((Cookie cookie) {
-    cookie.name = Uri.decodeQueryComponent(cookie.name);
-    cookie.value = Uri.decodeQueryComponent(cookie.value);
-    return cookie;
-  }).toList();
-  
+        cookie.name = Uri.decodeQueryComponent(cookie.name);
+        cookie.value = Uri.decodeQueryComponent(cookie.value);
+        return cookie;
+      }).toList();
+
   HttpRequest get input => _request;
   HttpSession get session => _request.session;
   X509Certificate get certificate => _request.certificate;
@@ -47,26 +47,26 @@ class Request {
 class Response {
   final HttpResponse _response;
   bool _isSent = false;
-  
+
   Response(this._response);
-  
+
   Response status(int code) {
     _response.statusCode = code;
     return this;
   }
-  
+
   bool get isSent => _isSent;
-  
+
   void send(String message) {
     _response.write(message);
     close();
   }
-  
+
   void close() {
     _isSent = true;
     _response.flush().then((_) => _response.close());
   }
-  
+
   header(String name, [value]) {
     if (value == null) {
       _response.headers[name];
@@ -74,7 +74,7 @@ class Response {
     _response.headers.set(name, value);
     return this;
   }
-  
+
   Response add(String content) {
     _response.write(content);
     return this;
@@ -86,8 +86,8 @@ class Response {
 
   Response type(String contentType) => set('Content-Type', contentType);
 
-  Response cache(String cacheType, [Map<String,String> options]) {
-    if(options == null) {
+  Response cache(String cacheType, [Map<String, String> options]) {
+    if (options == null) {
       options = {};
     }
     StringBuffer value = new StringBuffer(cacheType);
@@ -99,10 +99,8 @@ class Response {
 
   Response cookie(String name, String val, [Map options]) {
     var cookie = new Cookie(
-      Uri.encodeQueryComponent(name),
-      Uri.encodeQueryComponent(val)
-    ),
-    cookieMirror = reflect(cookie);
+            Uri.encodeQueryComponent(name), Uri.encodeQueryComponent(val)),
+        cookieMirror = reflect(cookie);
 
     if (options != null) {
       options.forEach((option, value) {
@@ -115,7 +113,7 @@ class Response {
   }
 
   Response deleteCookie(String name) {
-    Map options = { 'expires': 'Thu, 01-Jan-70 00:00:01 GMT', 'path': '/' };
+    Map options = {'expires': 'Thu, 01-Jan-70 00:00:01 GMT', 'path': '/'};
     cookie(name, '', options);
     return this;
   }
@@ -142,10 +140,9 @@ class Response {
   }
 }
 
-
 class RequestRoute {
   final String method;
   final String path;
-  
+
   RequestRoute(this.method, this.path);
 }
