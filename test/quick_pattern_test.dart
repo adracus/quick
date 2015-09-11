@@ -1,6 +1,6 @@
 library quick.test.pattern;
 
-import 'package:unittest/unittest.dart';
+import 'package:test/test.dart';
 import 'package:quick/quick.dart';
 
 main() => defineTests();
@@ -60,7 +60,7 @@ defineTests() {
   });
 
   group("UrlKeys", () {
-    group("Constructor", () {
+    test("Constructor", () {
       var keys = new UrlKeys.parse("/:id/:test");
       expect(keys.keys, equals({"id": 1, "test": 2}));
     });

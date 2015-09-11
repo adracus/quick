@@ -1,7 +1,7 @@
 library quick.test.requests;
 
 import 'package:quick/quick.dart';
-import 'package:unittest/unittest.dart';
+import 'package:test/test.dart';
 import 'package:mock/mock.dart';
 
 import 'mock.dart';

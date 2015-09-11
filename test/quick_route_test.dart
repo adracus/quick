@@ -2,7 +2,7 @@ library quick.test.route;
 
 import 'package:quick/quick.dart';
 import 'package:mock/mock.dart';
-import 'package:unittest/unittest.dart' hide Matcher;
+import 'package:test/test.dart' hide Matcher;
 
 import 'mock.dart';
 

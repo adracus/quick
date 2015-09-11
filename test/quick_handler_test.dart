@@ -1,6 +1,6 @@
 library quick.test.handler;
 
-import 'package:unittest/unittest.dart' hide Matcher;
+import 'package:test/test.dart' hide Matcher;
 import 'package:quick/quick.dart';
 import 'package:mock/mock.dart';
 
