@@ -5,42 +5,72 @@ import 'dart:mirrors' show reflect;
 import 'dart:convert' show JSON;
 
 class Request {
+  /** The plain underlying [HttpRequest] of this request. */
   final HttpRequest _request;
+
+  /** The body of this request. May be transformed or set freely. Can be null. */
   var body;
 
+  /** URL parameters of this request. Can be null.
+   *
+   * The url parameters are set as soon as an url matcher processes a path and
+   * are usually set when processed inside a [Handler]. */
   Map<String, String> parameters;
-  Map _context = {};
+
+  /** A freely configurable map. Holds additional information for each request. */
+  final Map _context = {};
 
   Request(this._request);
 
-  bool accepts(String type) => _request.headers['accept']
-      .where((name) => name.split(',').contains(type))
-      .isNotEmpty;
+  /** Checks if the given type is accepted by some of the headers. */
+  bool accepts(String type) =>
+      _request.headers['accept'].any((name) => name.split(',').contains(type));
 
-  bool isMime(String type) => _request.headers['content-type']
-      .where((value) => value == type)
-      .isNotEmpty;
+  /** Checks if any of the content-type headers contains the given type. */
+  bool isMime(String type) =>
+      _request.headers['content-type'].any((value) => value == type);
 
+  /** Checks if the x-forwarded-host header is not null. */
   bool get isForwarded => _request.headers['x-forwarded-host'] != null;
 
+  /** Gets the value associated with the key in the context of this. */
   operator [](key) => _context[key];
+
+  /** Sets the value with the given key in the context of this. */
   operator []=(key, value) => _context[key] = value;
 
+  /** Retrieves the given header. The name is converted to lower case. */
   List<String> header(String name) => _request.headers[name.toLowerCase()];
 
+  /** Returns the cookies of this request. */
   List<Cookie> get cookies => _request.cookies.map((Cookie cookie) {
         cookie.name = Uri.decodeQueryComponent(cookie.name);
         cookie.value = Uri.decodeQueryComponent(cookie.value);
         return cookie;
       }).toList();
 
+  /** The underlying original [HttpRequest] of this request. */
   HttpRequest get input => _request;
+
+  /** The [HttpSession] of this request. */
   HttpSession get session => _request.session;
+
+  /** The [X509Certificate] of this request. */
   X509Certificate get certificate => _request.certificate;
+
+  /** The requested uri. */
   Uri get uri => _request.uri;
+
+  /** The requested path. */
   String get path => uri.path;
+
+  /** The method of the request. */
   String get method => _request.method;
+
+  /** The query parameters of the request. */
   Map<String, String> get query => uri.queryParameters;
+
+  /** The [HttpHeaders] of this request. */
   HttpHeaders get headers => _request.headers;
 }
 

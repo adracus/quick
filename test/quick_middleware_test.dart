@@ -83,8 +83,6 @@ defineTests() {
   });
 
   group("TextBodyParser", () {
-    test("shouldApply", () {
-      var request = new MockRequest();
-    });
+    test("shouldApply", () {});
   });
 }

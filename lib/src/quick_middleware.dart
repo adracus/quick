@@ -8,13 +8,21 @@ import 'quick_requests.dart';
 import 'quick_handler.dart';
 import 'quick_route.dart';
 
+/** The next function for middlewares or error handlers. */
 typedef Next();
+
+/** The signature for middleware functions. */
 typedef MiddlewareHandlerFn(Request request, Response response, Next next);
+
+/** The signature for error handler functions. */
 typedef ErrorHandlerFn(error, Request request, Response response, Next next);
 
+/** Parses and sets the body of a request. */
 abstract class BodyParser implements Middleware {
+  /** The function that runs if the parsing errors. */
   ErrorHandlerFn onError;
 
+  /** Parses and sets the body. */
   MiddlewareHandlerFn get handlerFn =>
       (Request request, Response response, Next next) {
         if (shouldApply(request)) {
@@ -31,17 +39,26 @@ abstract class BodyParser implements Middleware {
         return next();
       };
 
+  /** A body parser that parses the request as json and sets the body. */
   factory BodyParser.json() => new JsonBodyParser();
+
+  /** A body parser that parses the request as text and sets the body. */
   factory BodyParser.text() => new TextBodyParser();
+
+  /** A body parser that parses the request as urlencoded and sets the body. */
   factory BodyParser.urlEncoded() => new UrlEncodedBodyParser();
 
+  /** Applies the parsing to the given request. */
   Future apply(Request request);
 
+  /** Checks whether the parsing should be applied to the given request. */
   bool shouldApply(Request request);
 
+  /** Always true for a body parser. */
   bool matches(String method, String path) => true;
 }
 
+/** A body parser that parses the incoming payload as text. */
 class TextBodyParser extends Object with BodyParser {
   TextBodyParser();
 
@@ -56,6 +73,7 @@ class TextBodyParser extends Object with BodyParser {
   }
 }
 
+/** A body parser that parses the incoming payload as json. */
 class JsonBodyParser extends Object with BodyParser {
   static final defaultOnError = (e, request, response, next) {
     response.status(HttpStatus.BAD_REQUEST).send("Invalid JSON");
@@ -81,6 +99,7 @@ class JsonBodyParser extends Object with BodyParser {
   }
 }
 
+/** A body parser that parses the incoming payload as urlencoded. */
 class UrlEncodedBodyParser extends Object with BodyParser {
   static final ErrorHandlerFn defaultOnError =
       (error, request, response, next) {
@@ -103,6 +122,7 @@ class UrlEncodedBodyParser extends Object with BodyParser {
   }
 }
 
+/** A middleware that logs time, method and uri for each request. */
 class LogMiddleware implements Middleware {
   MiddlewareHandlerFn get handlerFn => (request, response, next) {
         var time = new DateTime.now();
@@ -115,12 +135,14 @@ class LogMiddleware implements Middleware {
   bool matches(String method, String path) => true;
 }
 
+/** An error handler that always handles. */
 abstract class AlwaysErrorHandler implements ErrorHandler {
   const AlwaysErrorHandler();
 
   bool matches(String method, String path) => true;
 }
 
+/** An error handler that returns 404 if a route was not found. */
 class RouteNotFoundHandler extends AlwaysErrorHandler {
   ErrorHandlerFn get handlerFn =>
       (error, Request request, Response response, Next next) {
@@ -134,6 +156,7 @@ class RouteNotFoundHandler extends AlwaysErrorHandler {
   const RouteNotFoundHandler();
 }
 
+/** An error handler that sends 500 server error. */
 class UncaughtErrorHandler extends AlwaysErrorHandler {
   ErrorHandlerFn get handlerFn =>
       (error, Request request, Response response, Next next) {
@@ -150,9 +173,10 @@ class UncaughtErrorHandler extends AlwaysErrorHandler {
   const UncaughtErrorHandler();
 }
 
+/** List of middlewares. */
 class MiddlewareList extends Object
     with HandlerIterable<Middleware, MiddlewareHandlerFn> {
-  List<Middleware> handlers = [];
+  final List<Middleware> handlers = [];
 
   MiddlewareList();
 
@@ -167,9 +191,10 @@ class MiddlewareList extends Object
   }
 }
 
+/** A list of error handlers. */
 class ErrorHandlerList extends Object
     with HandlerIterable<ErrorHandler, ErrorHandlerFn> {
-  List<ErrorHandler> handlers = [];
+  final List<ErrorHandler> handlers = [];
 
   ErrorHandlerList();
 
