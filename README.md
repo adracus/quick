@@ -1,4 +1,4 @@
-# quick
+# quick [![Build Status](https://travis-ci.org/Adracus/quick.svg?branch=master)](https://travis-ci.org/Adracus/quick)
 
 quick is a web server implementation for the dart programming language. It
 is heavily inspired by [lvivski's start](https://github.com/lvivski/start)
