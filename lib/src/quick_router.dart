@@ -1,175 +1,276 @@
 library quick.router;
 
-import 'dart:async' show runZoned;
+import 'dart:async' show Stream, Future, StreamController, StreamTransformer;
+import 'dart:convert' show JSON;
 
-import 'quick_requests.dart';
-import 'quick_route.dart';
-import 'quick_middleware.dart';
-import 'quick_handler.dart';
+import 'quick_server.dart';
+import 'quick_pattern.dart' show UrlMatcher;
 
-class Router implements CompositeHandler {
-  /** Routes of this router.
-   *
-   * Routes are [Handler]s that take a request, accept it and send a response.*/
-  final RouteSet routes = new RouteSet();
+typedef Stream<Context> TransformFunction(Stream<Context> requests);
+typedef void ErrorHandler(Context ctx, error);
+typedef void ConsumeFunction(Context ctx);
 
-  /** Middleware of this router.
-   *
-   * Middlewares are [Handler]s that take requests, transform them and either
-   * accept them and send a response, reject them or pass it to the next
-   * [Handler]. */
-  final MiddlewareList middleware = new MiddlewareList();
+abstract class Directive {
+  bool matches(Context ctx);
 
-  /** Error handlers are [Handler]s that are called when errors occured.
-   *
-   * An error handler can decide whether it matches an error, can process it
-   * or hand it over to the next error handler. */
-  final ErrorHandlerList errorHandlers = new ErrorHandlerList();
+  Stream<Context> handle(Stream<Context> requests);
 
-  /** Creates a handler with the given [Matcher] and handler function.
-   *
-   * If the handler function is a [RouteHandlerFn], a [BaseRoute] is returned.
-   * If the handler function is a [MiddlewareHandlerFn], a [BaseMiddleware] is
-   * returned.
-   * If the handler function is an [ErrorHandlerFn], a [BaseErrorHandler] is
-   * returned.
-   * If the given function matches none of the mentioned signatures, an
-   * [ArgumentError] is thrown. */
-  createHandler(Matcher matcher, Function handlerFn) {
-    if (handlerFn is RouteHandlerFn) return new BaseRoute(matcher, handlerFn);
-    if (handlerFn
-        is MiddlewareHandlerFn) return new BaseMiddleware(matcher, handlerFn);
-    if (handlerFn
-        is ErrorHandlerFn) return new BaseErrorHandler(matcher, handlerFn);
-    throw new ArgumentError.value(
-        handlerFn, "handlerFn", "Invalid handler function");
+  factory Directive(TransformFunction transform) {
+    return new TransformDirective(transform);
   }
 
-  /** Internally creates a matcher and adds it to its handler list. */
-  void _addHandler(MethodSet methods, String path, Function handlerFn) {
-    var matcher = new Matcher(methods, path);
-    var handler = createHandler(matcher, handlerFn);
-    add(handler);
-  }
+  HorizontalCompositeDirective operator %(Directive that) => horizontal(that);
 
-  /** Adds the given [Handler].
-   *
-   * The handler has to be either a [Route], [Middleware] or [ErrorHandler],
-   * otherwise an [ArgumentError] will be thrown. */
-  void add(Handler handler) {
-    if (handler is Route) {
-      routes.add(handler);
-      return;
+  HorizontalCompositeDirective horizontal(Directive other) =>
+      HorizontalCompositeDirective.merge(this, other);
+
+  VerticalCompositeDirective get get => method("get");
+  VerticalCompositeDirective get post => method("post");
+  VerticalCompositeDirective get put => method("put");
+  VerticalCompositeDirective get delete => method("delete");
+  VerticalCompositeDirective get patch => method("patch");
+
+  VerticalCompositeDirective get logRoute => vertical(new LogDirective());
+
+  VerticalCompositeDirective path(String path) =>
+      vertical(new PathDirective(path));
+
+  VerticalCompositeDirective method(String name) =>
+      vertical(new MethodDirective(name));
+
+  VerticalCompositeDirective listen(ConsumeFunction consume) =>
+      vertical(new ConsumeDirective(consume));
+
+  VerticalCompositeDirective transform(TransformFunction transform) =>
+      vertical(new HandleDirective(transform));
+
+
+  VerticalCompositeDirective vertical(Directive other) =>
+      VerticalCompositeDirective.merge(this, other);
+
+  VerticalCompositeDirective operator -(Directive that) => vertical(that);
+}
+
+class HandleDirective extends Object with Directive {
+  final TransformFunction _transform;
+
+  HandleDirective(this._transform);
+
+  bool matches(Context ctx) => true;
+
+  Stream<Context> handle(Stream<Context> requests) => _transform(requests);
+}
+
+HandleDirective transform(TransformFunction t) => new HandleDirective(t);
+
+
+class NoOpDirective extends Object with Directive {
+  bool matches(Context ctx) => true;
+
+  Stream<Context> handle(Stream<Context> requests) => requests;
+}
+
+ConsumeDirective always(ConsumeFunction consumer) =>
+    new ConsumeDirective(consumer);
+
+class ConsumeDirective extends Object with Directive {
+  final ConsumeFunction _consumer;
+
+  ConsumeDirective(this._consumer);
+
+  bool matches(Context ctx) => true;
+
+  Stream<Context> handle(Stream<Context> requests) {
+    requests.listen(_consumer);
+    return new Stream.empty();
+  }
+}
+
+class LogDirective extends Object with Directive {
+  bool matches(Context ctx) => true;
+
+  Stream<Context> handle(Stream<Context> requests) async* {
+    await for (final Context ctx in requests) {
+      final req = ctx.request;
+      print("${new DateTime.now()}: ${req.method} ${req.path}");
+      yield ctx;
     }
-    if (handler is Middleware) {
-      middleware.add(handler);
-      return;
+  }
+}
+
+final LogDirective logRoute = new LogDirective();
+
+class TransformDirective extends Object with Directive {
+  final TransformFunction _transform;
+
+  TransformDirective(this._transform);
+
+  bool matches(Context ctx) => true;
+
+  Stream<Context> handle(Stream<Context> requests) => _transform(requests);
+}
+
+class MethodDirective extends Object with Directive {
+  final String name;
+
+  MethodDirective(String name) : name = name.toUpperCase();
+
+  bool matches(Context ctx) => name == ctx.request.method.toUpperCase();
+
+  Stream<Context> handle(Stream<Context> requests) => requests.where(matches);
+}
+
+final MethodDirective get = new MethodDirective("get");
+final MethodDirective put = new MethodDirective("put");
+final MethodDirective post = new MethodDirective("post");
+final MethodDirective patch = new MethodDirective("patch");
+final MethodDirective delete = new MethodDirective("delete");
+final MethodDirective update = new MethodDirective("update");
+
+abstract class ParserDirective implements Directive {
+  factory ParserDirective.text() => new TextParserDirective();
+  factory ParserDirective.json() => new JsonParserDirective();
+  factory ParserDirective.urlEncoded() => new UrlEncodedParserDirective();
+}
+
+class TextParserDirective extends Object with Directive implements ParserDirective {
+  bool matches(Context ctx) => ctx.request.headers.contentLength != null;
+
+  Stream<Context> handle(Stream<Context> requests) async* {
+    await for (final Context ctx in requests) {
+      final byteLines = await ctx.request.input.toList();
+      ctx.request.body = byteLines.fold("",
+          (result, line) => result + new String.fromCharCodes(line));
+      yield ctx;
     }
-    if (handler is ErrorHandler) {
-      errorHandlers.add(handler);
-      return;
+  }
+}
+
+class JsonParserDirective extends Object with Directive implements ParserDirective {
+  final _parser = new TextParserDirective();
+
+  bool matches(Context ctx) =>
+      _parser.matches(ctx) &&
+      ctx.request.headers.contentType != null &&
+      ctx.request.headers.contentType.primaryType == "application" &&
+      ctx.request.headers.contentType.subType == "json";
+
+  Stream<Context> handle(Stream<Context> requests) async* {
+    final parsed = _parser.handle(requests);
+    await for (final Context ctx in parsed) {
+      ctx.request.body = JSON.decode(ctx.request.body);
+      yield ctx;
     }
-    throw new ArgumentError.value(handler, "handler", "Invalid handler");
   }
+}
 
-  /** Registers a new handler on GET requests on the specified path. */
-  void get(String path, Function handler) {
-    _addHandler(new MethodSet.get(), path, handler);
-  }
+class UrlEncodedParserDirective extends Object with Directive implements ParserDirective {
+  final _parser = new TextParserDirective();
 
-  /** Registers a new handler on POST requests on the specified path. */
-  void post(String path, Function handler) {
-    _addHandler(new MethodSet.post(), path, handler);
-  }
+  bool matches(Context ctx) =>
+      _parser.matches(ctx) &&
+      ctx.request.headers.contentType != null &&
+      ctx.request.headers.contentType.primaryType == "application" &&
+      ctx.request.headers.contentType.subType == "x-www-form-urlencoded";
 
-  /** Registers a new handler on PUT requests on the specified path. */
-  void put(String path, Function handler) {
-    _addHandler(new MethodSet.put(), path, handler);
-  }
-
-  /** Registers a new handler on PATCH requests on the specified path. */
-  void patch(String path, Function handler) {
-    _addHandler(new MethodSet.patch(), path, handler);
-  }
-
-  /** Registers a new handler on DELETE requests on the specified path. */
-  void delete(String path, Function handler) {
-    _addHandler(new MethodSet.delete(), path, handler);
-  }
-
-  /** Registers a new handler on TRACE requests on the specified path. */
-  void trace(String path, Function handler) {
-    _addHandler(new MethodSet.trace(), path, handler);
-  }
-
-  /** Registers a new handler on HEAD requests on the specified path. */
-  void head(String path, Function handler) {
-    _addHandler(new MethodSet.head(), path, handler);
-  }
-
-  /** Registers a new handler on CONNECT requests on the specified path. */
-  void connect(String path, Function handler) {
-    _addHandler(new MethodSet.connect(), path, handler);
-  }
-
-  /** Registers a new handler on all requests on the specified path. */
-  void all(String path, Function handler) {
-    _addHandler(new MethodSet.all(), path, handler);
-  }
-
-  /** Registers a new handler on all methods and on all paths. */
-  void use(Function handler) {
-    _addHandler(new MethodSet.all(), "/.*", handler);
-  }
-
-  /** Handles the given [Request] and [Response] using routes and middleware. */
-  void handle(Request request, Response response) {
-    runZoned(() {
-      var handler = routes.matching(request.method, request.path,
-          orElse: () => const NonExistentRoute());
-      var mLayers = middleware.matching(request.method, request.path);
-      var layers = []
-        ..addAll(mLayers)
-        ..add(handler);
-
-      var calls = [];
-      for (int i = 0; i < layers.length; i++) {
-        calls.add(() {
-          var layer = layers[i];
-          if (layer is BaseHandler) request.parameters =
-              layer.matcher.parameters(request.path);
-          if (layer is Middleware) {
-            layer.handlerFn(request, response, () => calls[i + 1]());
-            return;
-          }
-          if (layer is Route) {
-            layer.handlerFn(request, response);
-          }
-        });
-      }
-      calls.first(); // Run the pipeline
-    }, onError: (error) => handleError(error, request, response));
-  }
-
-  /** Handles the given error that occured during the specified [Request]. */
-  void handleError(error, Request request, Response response) {
-    var handlers = errorHandlers.matching(request.method, request.path);
-    if (handlers.isEmpty) throw error;
-
-    var calls = [];
-    for (int i = 0; i < handlers.length; i++) {
-      calls.add(() {
-        var handler = handlers[i];
-        if (handler is BaseHandler) request.parameters =
-            handler.matcher.parameters(request.path);
-        handler.handlerFn(error, request, response, () {
-          if (i ==
-              handlers.length - 1) throw error; // Last handler, uncaught error
-          calls[i + 1]();
-        });
-      });
+  Stream<Context> handle(Stream<Context> requests) async* {
+    final parsed = _parser.handle(requests);
+    await for (final Context ctx in parsed) {
+      ctx.request.body = Uri.splitQueryString(ctx.request.body);
+      yield ctx;
     }
-
-    calls.first();
   }
+}
+
+class PathDirective extends Object with Directive {
+  final UrlMatcher _matcher;
+
+  PathDirective(String path) : _matcher = new UrlMatcher.parse(path);
+
+  PathDirective.matcher(this._matcher);
+
+  bool matches(Context ctx) {
+    final result = _matcher.matches(ctx.request.path);
+    print(result);
+    return result;
+  }
+
+  Stream<Context> handle(Stream<Context> requests) async* {
+    await for (final Context ctx in requests) {
+      ctx.request.parameters = _matcher.parameters(ctx.request.path);
+      yield ctx;
+    }
+  }
+}
+
+PathDirective path(String path) => new PathDirective(path);
+
+class VerticalCompositeDirective extends Object with Directive {
+  final List<Directive> _directives;
+
+  VerticalCompositeDirective(List<Directive> directives)
+      : _directives = directives.isEmpty
+            ? throw new ArgumentError.value(directives)
+            : directives;
+
+  bool matches(Context ctx) => _directives.first.matches(ctx);
+
+  Stream<Context> handle(Stream<Context> requests) {
+    return _directives.fold(
+        requests,
+        (Stream<Context> stream, Directive directive) =>
+            directive.handle(stream.where(directive.matches)));
+  }
+
+  static VerticalCompositeDirective merge(Directive d1, Directive d2) {
+    final l1 = d1 is VerticalCompositeDirective ? d1._directives : d1;
+    final l2 = d2 is VerticalCompositeDirective ? d2._directives : d2;
+    return new VerticalCompositeDirective(_concatenateLists(l1, l2));
+  }
+}
+
+class HorizontalCompositeDirective extends Object with Directive {
+  final List<Directive> _directives;
+
+  HorizontalCompositeDirective(this._directives);
+
+  bool matches(Context ctx) =>
+      _directives.any((directive) => directive.matches(ctx));
+
+  Stream<Context> handle(Stream<Context> requests) {
+    final merged = new StreamController<Context>();
+    final List _tuples = _directives.map((dir) {
+      final controller = new StreamController<Context>();
+      dir.handle(controller.stream).listen((ctx) => merged.add(ctx));
+      return [controller, dir];
+    }).toList();
+
+    requests.listen((ctx) {
+      final tuple = _tuples.firstWhere((t) => t[1].matches(ctx), orElse: null);
+      if (null != tuple)
+        tuple[0].add(ctx);
+    }, onDone: () => _tuples.forEach((t) => t[0].close()));
+
+    return merged.stream;
+  }
+
+  static HorizontalCompositeDirective merge(Directive d1, Directive d2) {
+    final l1 = d1 is HorizontalCompositeDirective ? d1._directives : d1;
+    final l2 = d2 is HorizontalCompositeDirective ? d2._directives : d2;
+    return new HorizontalCompositeDirective(_concatenateLists(l1, l2));
+  }
+}
+
+List _concatenateLists(a, b) {
+  if (a is! List) a = [a];
+  if (b is! List) b = [b];
+  return []..addAll(a)..addAll(b);
+}
+
+test() {
+  final d = new NoOpDirective();
+
+  d.get.path("/test").listen((Context ctx) {
+    ctx.complete("Yeha");
+  });
 }

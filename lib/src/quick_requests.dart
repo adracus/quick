@@ -99,7 +99,7 @@ class Response {
 
   header(String name, [value]) {
     if (value == null) {
-      _response.headers[name];
+      return _response.headers[name];
     }
     _response.headers.set(name, value);
     return this;
@@ -168,11 +168,4 @@ class Response {
     header('Location', url);
     _response.close();
   }
-}
-
-class RequestRoute {
-  final String method;
-  final String path;
-
-  RequestRoute(this.method, this.path);
 }
