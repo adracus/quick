@@ -2,7 +2,7 @@ name: quick
 description: A sample web application
 author: Axel Christ <adracus@gmail.com>
 homepage: https://github.com/Adracus/quick
-version: 0.0.1
+version: 0.1.0
 dependencies:
   mock: ">=0.11.0+2 <0.12.0"
   quiver: ">=0.21.3 <0.22.0"

@@ -7,8 +7,9 @@ import 'quick_server.dart';
 import 'quick_pattern.dart' show UrlMatcher;
 
 typedef Stream<Context> TransformFunction(Stream<Context> requests);
-typedef void ErrorHandler(Context ctx, error);
+typedef void ErrorHandler(error);
 typedef void ConsumeFunction(Context ctx);
+typedef bool ErrorMatcher(error);
 
 abstract class Directive {
   bool matches(Context ctx);
@@ -41,14 +42,32 @@ abstract class Directive {
   VerticalCompositeDirective listen(ConsumeFunction consume) =>
       vertical(new ConsumeDirective(consume));
 
+  ErrorHandlerDirective handleError(void onError(error), {bool test(error)}) =>
+      new ErrorHandlerDirective(this, onError, matcher: test);
+
   VerticalCompositeDirective transform(TransformFunction transform) =>
       vertical(new HandleDirective(transform));
-
 
   VerticalCompositeDirective vertical(Directive other) =>
       VerticalCompositeDirective.merge(this, other);
 
   VerticalCompositeDirective operator -(Directive that) => vertical(that);
+}
+
+class ErrorHandlerDirective extends Object with Directive {
+  static final ErrorMatcher _defaultMatcher = (_) => true;
+
+  final ErrorHandler _handler;
+  final ErrorMatcher _matcher;
+  final Directive _directive;
+
+  ErrorHandlerDirective(this._directive, this._handler, {ErrorMatcher matcher})
+    : _matcher = matcher == null ? _defaultMatcher : matcher;
+
+  bool matches(Context ctx) => _directive.matches(ctx);
+
+  Stream<Context> handle(Stream<Context> requests) =>
+      _directive.handle(requests).handleError(_handler, test: _matcher);
 }
 
 class HandleDirective extends Object with Directive {
@@ -62,7 +81,6 @@ class HandleDirective extends Object with Directive {
 }
 
 HandleDirective transform(TransformFunction t) => new HandleDirective(t);
-
 
 class NoOpDirective extends Object with Directive {
   bool matches(Context ctx) => true;
@@ -133,52 +151,92 @@ abstract class ParserDirective implements Directive {
   factory ParserDirective.urlEncoded() => new UrlEncodedParserDirective();
 }
 
-class TextParserDirective extends Object with Directive implements ParserDirective {
+abstract class ContextProcessingException implements Exception {
+  Context get context;
+}
+
+class BaseContextProcessingException implements ContextProcessingException {
+  final Context context;
+
+  BaseContextProcessingException(this.context);
+}
+
+class ParseException extends BaseContextProcessingException {
+  final cause;
+
+  ParseException(this.cause, Context context) : super(context);
+
+  String toString() => "Parsing encountered an exception: $cause";
+}
+
+class TextParserDirective extends Object
+    with Directive
+    implements ParserDirective {
   bool matches(Context ctx) => ctx.request.headers.contentLength != null;
 
-  Stream<Context> handle(Stream<Context> requests) async* {
-    await for (final Context ctx in requests) {
-      final byteLines = await ctx.request.input.toList();
-      ctx.request.body = byteLines.fold("",
-          (result, line) => result + new String.fromCharCodes(line));
-      yield ctx;
-    }
+  Stream<Context> handle(Stream<Context> requests) {
+    final controller = new StreamController<Context>();
+    requests.listen((Context ctx) async {
+      try {
+        final byteLines = await ctx.request.input.toList();
+        ctx.request.input.toList();
+        ctx.request.body = byteLines.fold(
+            "", (result, line) => result + new String.fromCharCodes(line));
+        controller.add(ctx);
+      } catch (e) {
+        final ex = new ParseException(e, ctx);
+        controller.addError(ex);
+      }
+    });
+    return controller.stream;
   }
 }
 
-class JsonParserDirective extends Object with Directive implements ParserDirective {
+class JsonParserDirective extends Object
+    with Directive
+    implements ParserDirective {
   final _parser = new TextParserDirective();
 
-  bool matches(Context ctx) =>
-      _parser.matches(ctx) &&
+  bool matches(Context ctx) => _parser.matches(ctx) &&
       ctx.request.headers.contentType != null &&
       ctx.request.headers.contentType.primaryType == "application" &&
       ctx.request.headers.contentType.subType == "json";
 
-  Stream<Context> handle(Stream<Context> requests) async* {
-    final parsed = _parser.handle(requests);
-    await for (final Context ctx in parsed) {
-      ctx.request.body = JSON.decode(ctx.request.body);
-      yield ctx;
-    }
+  Stream<Context> handle(Stream<Context> requests) {
+    final controller = new StreamController<Context>();
+    _parser.handle(requests).listen((Context ctx) async {
+      try {
+        ctx.request.body = JSON.decode(ctx.request.body);
+      } catch (e) {
+        final ex = new ParseException(e, ctx);
+        controller.addError(ex);
+      }
+    });
+    return controller.stream;
   }
 }
 
-class UrlEncodedParserDirective extends Object with Directive implements ParserDirective {
+class UrlEncodedParserDirective extends Object
+    with Directive
+    implements ParserDirective {
   final _parser = new TextParserDirective();
 
-  bool matches(Context ctx) =>
-      _parser.matches(ctx) &&
+  bool matches(Context ctx) => _parser.matches(ctx) &&
       ctx.request.headers.contentType != null &&
       ctx.request.headers.contentType.primaryType == "application" &&
       ctx.request.headers.contentType.subType == "x-www-form-urlencoded";
 
-  Stream<Context> handle(Stream<Context> requests) async* {
-    final parsed = _parser.handle(requests);
-    await for (final Context ctx in parsed) {
-      ctx.request.body = Uri.splitQueryString(ctx.request.body);
-      yield ctx;
-    }
+  Stream<Context> handle(Stream<Context> requests) {
+    final controller = new StreamController<Context>();
+    _parser.handle(requests).listen((Context ctx) async {
+      try {
+        ctx.request.body = Uri.splitQueryString(ctx.request.body);
+      } catch (e) {
+        final ex = new ParseException(e, ctx);
+        controller.addError(ex);
+      }
+    });
+    return controller.stream;
   }
 }
 
@@ -247,8 +305,7 @@ class HorizontalCompositeDirective extends Object with Directive {
 
     requests.listen((ctx) {
       final tuple = _tuples.firstWhere((t) => t[1].matches(ctx), orElse: null);
-      if (null != tuple)
-        tuple[0].add(ctx);
+      if (null != tuple) tuple[0].add(ctx);
     }, onDone: () => _tuples.forEach((t) => t[0].close()));
 
     return merged.stream;
@@ -265,12 +322,4 @@ List _concatenateLists(a, b) {
   if (a is! List) a = [a];
   if (b is! List) b = [b];
   return []..addAll(a)..addAll(b);
-}
-
-test() {
-  final d = new NoOpDirective();
-
-  d.get.path("/test").listen((Context ctx) {
-    ctx.complete("Yeha");
-  });
 }

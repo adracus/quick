@@ -2,11 +2,16 @@
 
 quick is a web server implementation for the dart programming language. It
 is heavily inspired by [lvivski's start](https://github.com/lvivski/start)
-(which is unfortunately not developed anymored) and the all-known express
-for node.
+(which is unfortunately not developed anymored) and the spray webframework
+for scala.
 
-quick features a middleware, route and error handler architecture and has
-fast setup as well as easy extensibility in mind.
+quick features the directive concept: A directive is something that handles
+a stream and may also produce a streams. Imagine your webserver being a tree:
+The request stream first meets the root directive. This directive may then
+decide to handle the request or to transform it and output it in its own
+stream. This stream is then passed onto the children of this directive and
+is handled by the first directive that matches. That may sound a bit abstract
+but see the usage in the following example.
 
 ## Installation
 
@@ -15,7 +20,7 @@ add the following:
 
 ```yaml
 dependencies:
-  quick: ">=0.0.1 < 0.1.0"
+  quick: ">=0.0.2 < 0.1.0"
 ```
 
 Then in your code, import it as follows:
@@ -27,13 +32,10 @@ import 'package:quick/quick.dart';
 ## Usage
 
 quick focuses on fast startup and a fast learning experience considered that
-it is quite similar to express.
+it is quite similar to spray.
 
-To create and start a server, first create one. Then, route handlers, middleware
-and error handlers can be added. They differentiate by their function signature:
-Routes have the signature `(Request request, Response response)`, middleware
-`(Request request, Response response, next)` and error handlers
-`(error, Request request, Response response, next)`, as known from express.
+To start, first create a directive. Then pass this directive to the creation
+of a server which can then be started on a specified port and host.
 
 Additionally, quick comes with some predefined middleware such as
 json, urlencoded and text body parsers, logging middleware and error handlers.
@@ -41,43 +43,23 @@ json, urlencoded and text body parsers, logging middleware and error handlers.
 An example of using quick can be seen below:
 
 ```dart
-main() {
-  var app = new Server();
+main() async {
+  final route =
+  logRoute - (
+    get - (
+      path("/ping")
+        .listen((Context ctx) => ctx.complete("pong")) %
+      path("/pong")
+        .listen((Context ctx) => ctx.complete("ping")) %
+      always((Context ctx) => ctx.complete("Not found"))
+    ) %
+    always((Context ctx) => ctx.complete("Other methods not supported"))
+  );
 
-  // Middleware that logs each request
-  app.router
-    ..add(new LogMiddleware())
-
-  // Error handler that catches if routes are not found and sends 404
-    ..add(new RouteNotFoundHandler())
-
-  // Error handler that catches all other uncaught exceptions
-    ..add(new UncaughtErrorHandler())
-
-  // Body parsing middleware. This one's for parsing json. */
-    ..add(new BodyParser.json())
-
-    ..get("/", (Request request, Response response) {
-      response.status(200).send("Hello World");
-    })
-
-    ..post("/message", (Request request, Response response) {
-      var body = request.body as Map;
-      if (!body.containsKey("message")) {
-        return response.status(400).send("No message specified");
-      }
-      return response.status(200).send("Your message was '${body["message"]}'");
-    })
-
-    ..get("/:param1/:param2", (Request request, Response response) {
-      final message = "URL parameters like ${request.parameters["param1"]} " +
-          "and ${request.parameters["param2"]} also work.";
-      response.status(200).send(message);
-    });
-
-  // Default port is 8080, interface 0.0.0.0
-  await app.listen();
-  print("Listening on ${app.port}");
+  final app = new Server(route);
+  app.start().then((_) {
+    print("Listening");
+  });
 }
 ```
 
