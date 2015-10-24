@@ -62,7 +62,7 @@ class ErrorHandlerDirective extends Object with Directive {
   final Directive _directive;
 
   ErrorHandlerDirective(this._directive, this._handler, {ErrorMatcher matcher})
-    : _matcher = matcher == null ? _defaultMatcher : matcher;
+      : _matcher = matcher == null ? _defaultMatcher : matcher;
 
   bool matches(Context ctx) => _directive.matches(ctx);
 
